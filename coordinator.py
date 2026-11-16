@@ -41,15 +41,15 @@ class ObicoDataUpdateCoordinator(DataUpdateCoordinator):
         # Make the request to the detection API
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(camera_image_url) as response:
-                    original_image_data = await response.read()  # Raw image data (bytes)
-                    original_image_base64 = base64.b64encode(original_image_data).decode('utf-8')
-                    
-                payload = {
-                    "img": original_image_base64,
+                # Die direkte Snapshot-URL deiner Kamera / deines Druckers (z.B. Moonraker/OctoPrint)
+                # Statt self._camera_url kannst du hier auch deine feste URL eintragen
+                params = {
+                    "image_url": self._camera_url, 
                     "threshold": self._threshold
                 }
-                async with session.post(self._url, json=payload) as detection_response:
+                
+                # GET-Request an den Obico ML-API Endpunkt mit Query-Parametern
+                async with session.get(self._url, params=params) as detection_response:
                     if detection_response.status != 200:
                         raise Exception(f"API call failed: {detection_response.status}")
                     
@@ -65,6 +65,7 @@ class ObicoDataUpdateCoordinator(DataUpdateCoordinator):
                         avg_confidence = round(avg_confidence, 2)
 
                     image_with_errors_base64 = detection_data.get("image_with_detections", None)
+                    image_with_errors = None
                     if image_with_errors_base64:
                         image_with_errors = base64.b64decode(image_with_errors_base64)
 
@@ -74,5 +75,5 @@ class ObicoDataUpdateCoordinator(DataUpdateCoordinator):
                         "avg_confidence": avg_confidence,
                     }
             except Exception as err:
-                _LOGGER.error(f"Error fetching data from Obico API: {err}")
+                _LOGGER.error(f"Error fetching data from Obico ML API: {err}")
                 raise

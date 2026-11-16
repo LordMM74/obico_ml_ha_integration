@@ -10,16 +10,21 @@ _LOGGER = logging.getLogger(__name__)
 
 class ObicoDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, url: str, camera_entity: str, interval: int, threshold: float):
-        self._url = url
-        self._camera_entity = camera_entity
-        self._threshold = threshold
-        self.api_enabled = False  # Initially enabled
-
+        """Initialize."""
+        self.entry = entry
+        
+        # Prüft zuerst ob Options existieren, sonst Fallback auf entry.data
+        self._url = entry.options.get("url", entry.data.get("url"))
+        self._camera_url = entry.options.get("camera_url", entry.data.get("camera_url"))
+        self._threshold = entry.options.get("threshold", entry.data.get("threshold", 0.25))
+        
+        self.api_enabled = True
+        
         super().__init__(
             hass,
             _LOGGER,
-            name="Obico ML",
-            update_interval=timedelta(seconds=interval),
+            name=DOMAIN,
+            update_interval=timedelta(seconds=30),
         )
 
     async def _async_update_data(self):

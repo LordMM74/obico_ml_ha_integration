@@ -1,125 +1,46 @@
-# Obico ML Home Assistant Integration
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/custom-components/hacs)
+# Obico ML Home Assistant Integration (Docker Fork)
 
-HA Integration for [Obico ML REST API server addon](https://github.com/nobodyguy/obico_ml_ha_addon). This integration allows you to turn any HA Camera entity into a source for Obico's AI 3D printing failure detection.
+Eine angepasste Home-Assistant-Integration zur lokalen KI-Fehlererkennung (Spaghetti-Erkennung) beim 3D-Druck mittels **Obico ML**.
 
-## Features
+> **Hinweis zu diesem Fork:**  
+> Dies ist ein angepasster Fork von [nobodyguy/obico_ml_ha_integration](https://github.com/nobodyguy/obico_ml_ha_integration). Anstelle des nicht mehr gepflegten Home Assistant Add-ons kommuniziert diese Version direkt mit der ML-API eines selbstgehosteten Obico-Docker-Containers über das Image von [imagegenius/docker-obico](https://github.com/imagegenius/docker-obico#readme).
 
-- Automatically detects 3D printing errors by periodically sending camera images to an external detection backend.
-- Configurable detection interval, threshold, and camera entity.
-- Provides three Home Assistant entities:
-  - **Camera**: Displays the image with detected errors.
-  - **Binary Sensor**: Indicates whether any errors have been detected.
-  - **Sensor**: Indicates detected failure confidence.
-  - **Switch**: Toggles communication with the detection API.
+## Funktionsweise & Änderungen gegenüber dem Original
+
+* **GET statt POST:** Die Integration sendet keine Base64-kodierten Bilddaten mehr per `POST`-Request, sondern nutzt den nativen `/detect`-Endpunkt der Obico ML API per `GET`-Request.
+* **Direkte Bild-URL (`image_url`):** Anstatt das Bild lokal in Home Assistant zu verarbeiten, wird die direkte Snapshot-URL der Kamera (z. B. von Moonraker/OctoPrint) als Parameter an den ML-Server übergeben, der das Bild eigenständig abruft.
+
+## Voraussetzungen
+
+1. **Laufender Obico-Server / ML-API:** Ein eingerichteter Container auf Basis von [imagegenius/docker-obico](https://github.com/imagegenius/docker-obico#readme), dessen ML-API-Endpunkt (Standardport `3333` bzw. `/detect`) aus dem Netzwerk erreichbar ist.
+2. **Direkte Snapshot-URL der Kamera:** Eine per HTTP erreichbare URL, die ein aktuelles Einzelbild (JPEG) des 3D-Druckers liefert (z. B. `http://<DRUCKER-IP>/webcam/?action=snapshot`). *Wichtig: Der Docker-Container muss diese URL ohne Login-Abfrage direkt erreichen können.*
 
 ## Installation
 
-1. Install [HACS](https://hacs.xyz/) (Home Assistant Community Store) if you haven't already.
-2. Add this repository to HACS as a custom repository:
-   - Go to **HACS** > **Integrations**.
-   - Click on the three dots in the upper-right corner and select **Custom repositories**.
-   - Enter the URL: `https://github.com/nobodyguy/obico_ml_ha_integration`.
-   - Choose **Integration** as the category.
-3. Search for **Obico ML** in HACS and install the integration.
-4. Restart Home Assistant.
+### Über HACS (Empfohlen)
 
-Alternatively, you can manually copy the `obico_ml_ha_integration` folder to your `custom_components` directory.
+1. Öffne **HACS** in Home Assistant.
+2. Klicke oben rechts auf das Drei-Punkte-Menü und wähle **Benutzerdefinierte Repositories** (Custom repositories).
+3. Füge folgende URL hinzu: `https://github.com/LordMM74/obico_ml_ha_integration`
+4. Wähle als Kategorie **Integration** aus und klicke auf **Hinzufügen**.
+5. Suche nach **Obico ML**, installiere die Integration und starte Home Assistant neu.
 
-## Configuration
+### Manuelle Installation
 
-To configure the integration:
+1. Lade dieses Repository herunter und kopiere den Ordner `custom_components/obico_ml` in das Verzeichnis `config/custom_components/` deiner Home-Assistant-Instanz.
+2. Starte Home Assistant neu.
 
-1. Go to **Configuration** > **Integrations** in Home Assistant.
-2. Click on the **Add Integration** button.
-3. Search for **Obico ML** and click on it to configure.
-4. Fill in the configuration parameters.
+## Konfiguration
 
-### Configuration Options
+1. Gehe in Home Assistant zu **Einstellungen** > **Geräte & Dienste**.
+2. Klicke unten rechts auf **Integration hinzufügen** und suche nach **Obico ML**.
+3. Trage die erforderlichen Verbindungsdaten ein:
+   * **ML API URL:** Die URL zum `/detect`-Endpunkt deines Obico-Containers (z. B. `http://<SERVER-IP>:3333/detect`).
+   * **Kamera Snapshot URL:** Die direkte HTTP-URL zum Kamerabild deines Druckers.
+   * **Threshold (Schwellenwert):** Empfindlichkeit der Fehlererkennung (Standardwert meist zwischen `0.25` und `0.5`).
 
-- **API URL**: The URL of the detection backend.
-- **Camera Entity**: The camera entity used to capture images for error detection.
-- **Detection Interval**: The interval (in seconds) between detection API calls.
-- **Detection Threshold**: Optional. The threshold for error detection sensitivity.
+## Bereitgestellte Entitäten
 
-## Provided Entities
-
-### Camera
-
-Displays the image with detected 3D printing errors. This camera entity updates periodically based on the detection interval.
-
-### Binary Sensor
-
-A binary sensor that indicates whether any errors have been detected. If errors are found in the image, the sensor will show `on`, otherwise `off`.
-
-### Sensor
-
-A numeric sensor that indicates detected failure confidence.
-
-### Switch
-
-Allows you to enable or disable the periodic communication with the detection API to save HW resources. When switched off, error detection is paused.
-
-## Example Usage
-
-```yaml
-# Example automation for detecting 3D printing failures
-automation:
-  - alias: "Toggle Obico ML Detection based on Printer State"
-    trigger:
-      - platform: state
-        entity_id: sensor.prusalink
-    action:
-      - choose:
-          - conditions:
-              - condition: state
-                entity_id: sensor.prusalink
-                state: "printing"
-            sequence:
-              - service: switch.turn_on
-                target:
-                  entity_id: switch.obico_ml_communication
-          - conditions:
-              - condition: not
-                conditions:
-                  - condition: state
-                    entity_id: sensor.prusalink
-                    state: "printing"
-            sequence:
-              - service: switch.turn_off
-                target:
-                  entity_id: switch.obico_ml_communication
-  - alias: "Notify on 3D printing failure"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.obico_ml_failure_detected
-        to: "on"
-    action:
-      - service: notify.notify
-        data:
-          message: "3D printing failure detected!"
-          data:
-            image: /api/camera_proxy/camera.obico_ml_detection_camera
-```
-
-## Troubleshooting
-If you encounter issues with the integration, check the Home Assistant logs for error messages. Common issues include:
-
-* Camera entity not found: Ensure that the camera entity you configured is available and working.
-* API communication issues: Verify that the detection backend is running and reachable by Home Assistant.
-
-## Issues
-
-If you encounter any issues or have feature requests, please open an issue on the [GitHub repository](https://github.com/username/ha_prusaconnect_webcam_uploader_integration/issues).
-
-## Contributing
-
-Contributions are welcome! Please open a pull request with any changes or improvements.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
-
-## TODO
-* Port predictions - https://github.com/TheSpaghettiDetective/obico-server/blob/release/backend/api/octoprint_views.py#L122
-* Resize image
+* **Binary Sensor (`error_detected`):** Schaltet auf `Erkannt` (`on`), sobald die KI ein Druckproblem (z. B. Spaghetti) feststellt.
+* **Sensor (`avg_confidence`):** Gibt die durchschnittliche Erkennungssicherheit (Confidence) in Prozent an.
+* **Camera / Image (`image_with_errors`):** Zeigt das zuletzt geprüfte Bild inklusive der von der KI eingezeichneten Erkennungsrahmen (Bounding Boxes) an.
